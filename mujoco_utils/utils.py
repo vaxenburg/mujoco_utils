@@ -1,5 +1,12 @@
 """General-purpose utilities."""
 
+from typing import Sequence
+
+
+def any_substr_in_str(substrings: Sequence[str], string: str) -> bool:
+    """Checks if any of substrings is in string."""
+    return any(s in string for s in substrings)
+
 
 def print_tree(d):
     """Prints tree view of a dict-like structure.
