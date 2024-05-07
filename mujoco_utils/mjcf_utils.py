@@ -1,5 +1,6 @@
-"""MJCF utilities."""
+"""Utilities for working with and manipulating MJCF models."""
 
+from typing import Sequence
 from lxml import etree
 
 
@@ -63,6 +64,35 @@ def mjcf2xml(mjcf_model: 'mjcf.RootElement',
             f.write(xml_string)
     else:
         return xml_string
+
+
+def change_body_frame(body: 'mjcf.Element',
+                      frame_pos: Sequence | None = None,
+                      frame_quat: Sequence | None = None):
+    """In-place change the frame of a body while maintaining child locations."""
+    frame_pos = np.zeros(3) if frame_pos is None else frame_pos
+    frame_quat = np.array((1., 0, 0, 0)) if frame_quat is None else frame_quat
+    # Get frame transformation.
+    body_pos = np.zeros(3) if body.pos is None else body.pos
+    dpos = body_pos - frame_pos
+    body_quat = np.array((1., 0, 0, 0)) if body.quat is None else body.quat
+    dquat = mul_quat(neg_quat(frame_quat), body_quat)
+    # Translate and rotate the body to the new frame.
+    body.pos = frame_pos
+    body.quat = frame_quat
+    # Move all its children to their previous location.
+    for child in body.all_children():
+        if not hasattr(child, 'pos'):
+            continue
+        # Rotate:
+        if hasattr(child, 'quat'):
+            child_quat = np.array(
+                (1., 0, 0, 0)) if child.quat is None else child.quat
+            child.quat = mul_quat(dquat, child_quat)
+        # Translate, accounting for rotations.
+        child_pos = np.zeros(3) if child.pos is None else child.pos
+        pos_in_parent = rot_vec_quat(child_pos, body_quat) + dpos
+        child.pos = rot_vec_quat(pos_in_parent, neg_quat(frame_quat))
 
 
 def get_mjcf_tree(element: 'mjcf.Element',
