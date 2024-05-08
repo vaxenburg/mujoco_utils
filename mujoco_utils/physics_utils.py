@@ -60,4 +60,3 @@ def get_enabled_observables(walker) -> dict:
         if v.enabled:
             enabled_obs[k] = v
     return enabled_obs
-
