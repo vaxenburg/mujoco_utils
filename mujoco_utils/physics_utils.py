@@ -60,3 +60,72 @@ def get_enabled_observables(walker) -> dict:
         if v.enabled:
             enabled_obs[k] = v
     return enabled_obs
+
+
+def get_critical_damping(physics, joint_name, qpos0=None,
+                         dof_name=None, actuator_name=None,
+                         joint_spring=True, actuator_spring=True,
+                         return_current_damping=False,
+                         test_forces=None):
+    """Calculate critical damping for a joint, possibly taking into account both
+    joint stiffness spring and position actuator gainprm.
+    
+    Args:
+        physics: physics instance.
+        joint_name: Joint name to calculate critical damping for.
+        qpos0: Pose to calculate effective inertia for. If not provided, the
+            current physics.data.qpos is taken as qpos0.
+        dof_name: Damping's DoF name, only used if return_current == True.
+            None: use joint_name for dof_name.
+        actuator_name: Actuator's name. None: use joint_name for actuator_name.
+        joint_spring: Whether to use joint (stiffness) spring constant.
+        actuator_spring: Whether to use actuator gainprm as spring constant.
+        return_current_daping: Whether to return the current damping as well
+            (for comparison, diagnostics, etc.)
+        test_forces: Test forces to calculate effective inertia for. If not
+            provided, a default range is used.
+        
+    Returns:
+        Depending on return_current_damping, return critical_damping or 
+            (critical_damping, current_damping).
+    """
+    # Prevent in-place changes to physics.
+    physics = physics.copy()
+    
+    if qpos0 is None:
+        qpos0 = physics.data.qpos.copy()
+    if dof_name is None:
+        dof_name = joint_name
+    if actuator_name is None:
+        actuator_name = joint_name
+    if test_forces is None:
+        # Three orders of magnitude default range.
+        test_forces = np.logspace(-2, 1, 20)
+    
+    # Get effective inertia.
+    inertia = []
+    for force in test_forces:
+        with physics.reset_context():
+            physics.data.qpos = qpos0.copy()
+        physics.named.data.qfrc_applied[joint_name] = force
+        physics.step()
+        acc = physics.named.data.qacc[joint_name].copy()
+        assert len(acc) == 1, f'{joint_name} is not a hinge joint.'
+        inertia.append(force/acc[0])
+        
+    mean_inertia = np.mean(inertia)
+    # Assume effective inertia is not very different for all test forces.
+    assert np.std(inertia) / mean_inertia < 0.2
+    
+    spring_const = 0.
+    if joint_spring:
+        spring_const = spring_const + physics.named.model.jnt_stiffness[joint_name]
+    if actuator_spring:
+        spring_const = (spring_const + 
+                        physics.named.model.actuator_gainprm[actuator_name][0])
+    critical_damping = 2 * np.sqrt(spring_const * mean_inertia)
+
+    if return_current_damping:
+        current_damping = physics.named.model.dof_damping[dof_name][0]
+        return critical_damping, current_damping
+    return critical_damping
