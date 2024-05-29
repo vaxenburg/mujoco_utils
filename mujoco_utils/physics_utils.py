@@ -68,7 +68,7 @@ def get_critical_damping(physics: 'mjcf.Physics',
                          joint_spring: bool = True,
                          actuator_spring: bool = True) -> float:
     """Calculate critical damping for a joint, possibly taking into account both
-    joint stiffness spring and position actuator gainprm.
+    actuator gainprm and joint stiffness spring.
     
     Args:
         physics: A physics instance.
